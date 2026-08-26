@@ -21,7 +21,7 @@
 
       <section class="step">
         <span class="number">1</span>
-        <div><h2>Create a private data repository</h2><p>Create a private GitHub repository named something like <code>dayline-data</code>. It can be separate from the public repository that hosts the app.</p><p>Create a fine-grained personal access token limited to this repository with <strong>Contents: read and write</strong>.</p></div>
+        <div><h2>Use the private data repository</h2><p>Your private <code>trevormw20/dayline-data</code> repository is separate from the public repository that hosts the app.</p><p>Create a fine-grained personal access token limited to this repository with <strong>Contents: read and write</strong>.</p></div>
       </section>
 
       <section class="step">
@@ -31,7 +31,7 @@
 
       <section class="step">
         <span class="number">3</span>
-        <div><h2>Point automation at the private repository</h2><p>In the app repository, open Settings → Secrets and variables → Actions.</p><div class="secret"><strong>DAYLINE_DATA_REPO</strong><span>Repository variable: your-user/dayline-data</span></div><div class="secret"><strong>DAYLINE_DATA_TOKEN</strong><span>Repository secret: the fine-grained token</span></div><p>If the app and data use one private repository, you can skip both values.</p></div>
+        <div><h2>Keep automation private</h2><p>The scheduled automation workflow runs inside <code>trevormw20/dayline-data</code>. Its built-in GitHub token can update the private workspace without giving the public app repository access to your data.</p><p>Add Gmail and OpenAI secrets to the <strong>private data repository</strong>, never the public app repository.</p></div>
       </section>
 
       <section class="step">

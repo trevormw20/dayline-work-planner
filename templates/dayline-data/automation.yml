@@ -27,10 +27,6 @@ jobs:
         run: node scripts/dayline-automation.mjs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DAYLINE_DATA_REPO: ${{ vars.DAYLINE_DATA_REPO }}
-          DAYLINE_DATA_BRANCH: ${{ vars.DAYLINE_DATA_BRANCH }}
-          DAYLINE_DATA_PATH: ${{ vars.DAYLINE_DATA_PATH }}
-          DAYLINE_DATA_TOKEN: ${{ secrets.DAYLINE_DATA_TOKEN }}
           DAYLINE_TIMEZONE: ${{ vars.DAYLINE_TIMEZONE }}
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}

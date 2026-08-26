@@ -2,7 +2,7 @@
 
 Dayline is a calm, mobile-first work planner for Hidermatology and Soleivar. It keeps the focus list deliberately short, raises the priority of work that ages or misses a deadline, turns calls and emails into trackable follow-ups, and builds a rolling weekly record of completed work.
 
-The app is a static installable website. Your work data lives in a private GitHub repository, not in browser storage. The browser only retains the GitHub repository address and—if you explicitly choose it—the access token used by that device.
+The app is a static installable website. The public app code and private work data use separate repositories, so your work data lives in a private GitHub repository rather than browser storage. The browser only retains the GitHub repository address and—if you explicitly choose it—the access token used by that device.
 
 ## What is finished
 
@@ -37,26 +37,16 @@ npm run build
 npm audit
 ```
 
-## Recommended GitHub layout
+## GitHub layout
 
-There are two good ways to host Dayline.
-
-### Option A: one private repository
-
-Use one private repository for the source, GitHub Pages deployment, workflows, and `data/workspace.json`. This is simplest if your GitHub plan allows Pages from a private repository. The Pages artifact contains only the compiled app; Vite does not publish the root `data` folder.
-
-### Option B: public app + private data repository
-
-This works on GitHub Free and keeps work data private:
+The production setup uses two repositories. This works on GitHub Free and keeps work data private:
 
 1. Put this project in a public repository such as `dayline-app` and enable GitHub Pages.
 2. Create a second **private** repository such as `dayline-data`.
-3. Copy `data/workspace.json` into the private repository, or let Dayline create it on first connection.
-4. Create a fine-grained token limited to `dayline-data` with **Contents: read and write**.
-5. In the app repository, add the Actions variable `DAYLINE_DATA_REPO` with `YOUR-USER/dayline-data`.
-6. In the app repository, add the Actions secret `DAYLINE_DATA_TOKEN` with that fine-grained token.
+3. Put the files from `templates/dayline-data` plus `scripts/dayline-automation.mjs` into the private repository. The live `trevormw20/dayline-data` repository has already been prepared this way.
+4. Create a fine-grained token limited to `dayline-data` with **Contents: read and write** and enter it in Dayline on each device.
 
-The browser and automation can then write the same private file safely while the website itself remains public.
+The browser and private-repository automation then write the same private file safely while the website itself remains public.
 
 ## Publish the app
 
@@ -133,13 +123,10 @@ If `OPENAI_API_KEY` is absent, Dayline still creates a short deterministic daily
 
 ## Automation variables
 
-Optional repository variables:
+Optional variables in the private data repository:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DAYLINE_DATA_REPO` | current repository | Private data repository in `owner/repo` form |
-| `DAYLINE_DATA_BRANCH` | `main` | Data branch |
-| `DAYLINE_DATA_PATH` | `data/workspace.json` | Workspace file path |
 | `DAYLINE_TIMEZONE` | `America/Denver` | Local date used for daily planning |
 | `GMAIL_QUERY` | unread, recent, no promotions/social | Gmail search query |
 | `OPENAI_MODEL` | `gpt-5-mini` | Responses API model |
@@ -184,10 +171,10 @@ src/                         React application
   hooks/useWorkspace.ts      GitHub sync and device polling
   lib/priority.ts            Priority-aging rules
   lib/workspace.ts           Tasks, reports, routing, conflict merge
-scripts/dayline-automation.mjs  Gmail, OpenAI, reports, retention
+scripts/dayline-automation.mjs  Gmail, OpenAI, reports, retention source
 scripts/google-oauth.mjs        One-time Gmail authorization helper
-.github/workflows/           Pages deployment and scheduled automation
-data/workspace.json          Empty starter data file
+.github/workflows/           Public Pages deployment only
+templates/dayline-data/      Private data-repository starter files
 ```
 
 ## Notes for future changes
