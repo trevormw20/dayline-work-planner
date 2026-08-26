@@ -755,7 +755,7 @@ function SettingsView({
   onDisconnect: () => void
   onRefresh: () => void
 }) {
-  const [form, setForm] = useState<GitHubConnection>(connection || { owner: '', repo: 'dayline-data', branch: 'main', path: 'data/workspace.json', token: '', rememberToken: false })
+  const [form, setForm] = useState<GitHubConnection>(connection || { owner: 'trevormw20', repo: 'dayline-data', branch: 'main', path: 'data/workspace.json', token: '', rememberToken: false })
   const [formError, setFormError] = useState('')
   const [notificationState, setNotificationState] = useState<NotificationPermission>(typeof Notification === 'undefined' ? 'denied' : Notification.permission)
 
