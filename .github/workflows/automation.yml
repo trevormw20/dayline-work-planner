@@ -1,0 +1,40 @@
+name: Dayline automation
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dayline-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check Gmail and maintain the plan
+        run: node scripts/dayline-automation.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DAYLINE_DATA_REPO: ${{ vars.DAYLINE_DATA_REPO }}
+          DAYLINE_DATA_BRANCH: ${{ vars.DAYLINE_DATA_BRANCH }}
+          DAYLINE_DATA_PATH: ${{ vars.DAYLINE_DATA_PATH }}
+          DAYLINE_DATA_TOKEN: ${{ secrets.DAYLINE_DATA_TOKEN }}
+          DAYLINE_TIMEZONE: ${{ vars.DAYLINE_TIMEZONE }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_QUERY: ${{ vars.GMAIL_QUERY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-26T00:00:00.000Z",
+  "tasks": [],
+  "briefs": [],
+  "reports": [],
+  "workplaces": [
+    {
+      "id": "hidermatology",
+      "name": "Hidermatology",
+      "shortName": "Hider",
+      "color": "#35756a",
+      "keywords": ["hider", "dermatology", "clinic", "patient", "appointment", "provider", "medical", "derm", "google ads"]
+    },
+    {
+      "id": "soleivar",
+      "name": "Soleivar",
+      "shortName": "Soleivar",
+      "color": "#d06a48",
+      "keywords": ["soleivar", "order", "inventory", "product", "vendor", "shipping", "store", "customer", "supplier"]
+    }
+  ],
+  "gmail": {
+    "lastSyncAt": null,
+    "processedMessageIds": []
+  }
+}
