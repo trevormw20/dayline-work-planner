@@ -32,6 +32,29 @@ export interface Task {
   tags: string[]
   tip: string
   dailyKey?: string
+  importMeta?: TaskImportMeta
+}
+
+export interface ImportedTaskSnapshot {
+  title: string
+  notes: string
+  workplace: WorkplaceId
+  kind: TaskKind
+  startPriority: Exclude<Priority, 'urgent'>
+  dueAt: string | null
+  scheduledFor: string | null
+  tags: string[]
+  tip: string
+}
+
+export interface TaskImportMeta {
+  bundleId: string
+  externalId: string
+  sourceProjectId: string
+  sourceProjectName: string
+  importedAt: string
+  sourceRefs: string[]
+  managed: ImportedTaskSnapshot
 }
 
 export interface AiBrief {

@@ -31,6 +31,7 @@ import {
   Tag,
   TimerReset,
   Trash2,
+  Upload,
   WandSparkles,
   X,
   Zap,
@@ -59,6 +60,13 @@ import {
   toLocalInput,
 } from './lib/dates'
 import { getEffectivePriority, priorityLabel, sortTasks } from './lib/priority'
+import {
+  mergeTaskBundle,
+  parsePlannerTaskBundle,
+  previewTaskBundle,
+  suggestedWorkplace,
+  type PlannerTaskBundle,
+} from './lib/importBundle'
 import type {
   GitHubConnection,
   Priority,
@@ -213,6 +221,11 @@ function App() {
               onConnect={workspace.connect}
               onDisconnect={workspace.disconnect}
               onRefresh={() => void workspace.refresh()}
+              onImportBundle={(bundle, workplace) => {
+                const preview = previewTaskBundle(workspace.data, bundle, workplace)
+                workspace.mutate((data) => mergeTaskBundle(data, bundle, workplace).data)
+                setToast(`${preview.added + preview.updated} project task${preview.added + preview.updated === 1 ? '' : 's'} imported`)
+              }}
             />
           )}
         </main>
@@ -746,6 +759,7 @@ function SettingsView({
   onConnect,
   onDisconnect,
   onRefresh,
+  onImportBundle,
 }: {
   data: WorkspaceData
   connection: GitHubConnection | null
@@ -754,10 +768,21 @@ function SettingsView({
   onConnect: (connection: GitHubConnection) => Promise<void>
   onDisconnect: () => void
   onRefresh: () => void
+  onImportBundle: (bundle: PlannerTaskBundle, workplace: WorkplaceId) => void
 }) {
   const [form, setForm] = useState<GitHubConnection>(connection || { owner: 'trevormw20', repo: 'dayline-data', branch: 'main', path: 'data/workspace.json', token: '', rememberToken: false })
   const [formError, setFormError] = useState('')
   const [notificationState, setNotificationState] = useState<NotificationPermission>(typeof Notification === 'undefined' ? 'denied' : Notification.permission)
+  const [importBundle, setImportBundle] = useState<PlannerTaskBundle | null>(null)
+  const [importFileName, setImportFileName] = useState('')
+  const [importWorkplace, setImportWorkplace] = useState<WorkplaceId>(data.workplaces[0]?.id ?? 'hidermatology')
+  const [importError, setImportError] = useState('')
+  const [importMessage, setImportMessage] = useState('')
+
+  const importPreview = useMemo(
+    () => importBundle ? previewTaskBundle(data, importBundle, importWorkplace) : null,
+    [data, importBundle, importWorkplace],
+  )
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -776,6 +801,39 @@ function SettingsView({
   const requestNotifications = async () => {
     if (typeof Notification === 'undefined') return
     setNotificationState(await Notification.requestPermission())
+  }
+
+  const readImportFile = async (file?: File) => {
+    setImportError('')
+    setImportMessage('')
+    setImportBundle(null)
+    if (!file) return
+    if (file.size > 2_000_000) {
+      setImportError('That file is larger than 2 MB. Export a focused project bundle with no more than 500 tasks.')
+      return
+    }
+    try {
+      const parsed = parsePlannerTaskBundle(JSON.parse(await file.text()))
+      const suggested = suggestedWorkplace(parsed, data.workplaces)
+      setImportWorkplace(suggested ?? data.workplaces[0]?.id ?? 'hidermatology')
+      setImportFileName(file.name)
+      setImportBundle(parsed)
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Dayline could not read that JSON file.')
+    }
+  }
+
+  const confirmImport = () => {
+    if (!importBundle || !importPreview) return
+    if (!connection) {
+      setImportError('Connect the private GitHub data vault first so imported tasks are saved and synced.')
+      return
+    }
+    onImportBundle(importBundle, importWorkplace)
+    const changed = importPreview.added + importPreview.updated
+    setImportMessage(`${changed} change${changed === 1 ? '' : 's'} merged from ${importBundle.source.projectName}. ${importPreview.unchanged} already matched. Nothing was deleted.`)
+    setImportBundle(null)
+    setImportFileName('')
   }
 
   return (
@@ -811,6 +869,29 @@ function SettingsView({
           <div className="integration-head"><span><strong>Automation status</strong><small>{data.gmail.lastSyncAt ? `Last run ${formatRelativeDay(data.gmail.lastSyncAt)}` : 'Waiting for repository secrets'}</small></span><span className={`status-badge ${data.gmail.lastSyncAt ? 'success' : ''}`}>{data.gmail.lastSyncAt ? 'Active' : 'Not configured'}</span></div>
           <ol className="setup-steps"><li><span>1</span><div><strong>Add Gmail OAuth secrets</strong><small>GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN</small></div></li><li><span>2</span><div><strong>Add your OpenAI API key</strong><small>OPENAI_API_KEY creates concise summaries and improves email routing.</small></div></li><li><span>3</span><div><strong>Enable GitHub Actions</strong><small>The included workflow checks mail every 15 minutes and prepares a daily brief.</small></div></li></ol>
           <a className="secondary-button inline" href="./setup.html" target="_blank"><CircleHelp size={16} /> Open setup guide</a>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <div className="settings-copy"><span className="settings-icon import"><Upload size={21} /></span><div><h2>Import a project plan</h2><p>Choose a planner task bundle, review exactly what will change, then merge it into one workplace.</p></div></div>
+        <div className="settings-panel import-panel">
+          <div className="import-picker">
+            <div><strong>Project task bundle</strong><p>Re-importing the same bundle updates its tasks instead of creating duplicates.</p></div>
+            <label className="secondary-button file-button"><Upload size={16} /> Choose JSON file<input type="file" accept=".json,application/json" onChange={(event) => { void readImportFile(event.target.files?.[0]); event.currentTarget.value = '' }} /></label>
+          </div>
+          {importError && <div className="form-error" role="alert">{importError}</div>}
+          {importMessage && <div className="form-success" role="status"><CheckCircle2 size={16} />{importMessage}</div>}
+          {importBundle && importPreview && (
+            <div className="import-preview">
+              <div className="import-preview-head"><div><span className="eyebrow">Ready to review</span><h3>{importBundle.source.projectName}</h3><p>{importFileName} · generated {formatShortDate(importBundle.generatedAt)}</p></div><span className="status-badge success">Valid bundle</span></div>
+              <Field label="Import into"><select value={importWorkplace} onChange={(event) => setImportWorkplace(event.target.value as WorkplaceId)}>{data.workplaces.map((workplace) => <option key={workplace.id} value={workplace.id}>{workplace.name}</option>)}</select></Field>
+              <div className="import-counts"><span><strong>{importPreview.added}</strong>New</span><span><strong>{importPreview.updated}</strong>Updates</span><span><strong>{importPreview.unchanged}</strong>Unchanged</span><span><strong>{importPreview.scheduled}</strong>Scheduled</span></div>
+              {importPreview.preservedEdits > 0 && <p className="preserved-note"><Check size={15} />{importPreview.preservedEdits} manual edit{importPreview.preservedEdits === 1 ? '' : 's'} will be preserved.</p>}
+              <div className="import-task-list">{importPreview.items.slice(0, 8).map((item) => <div key={item.externalId}><span className={`import-action ${item.action}`}>{item.action}</span><span>{item.title}</span>{item.scheduled && <Clock3 size={14} aria-label="Scheduled" />}</div>)}{importPreview.items.length > 8 && <p>+ {importPreview.items.length - 8} more tasks in this bundle</p>}</div>
+              <div className="import-safety"><CheckCircle2 size={17} /><span><strong>Safe merge only.</strong> Completed work stays completed, personal edits are preserved, and missing bundle items never delete Dayline tasks.</span></div>
+              <div className="button-row"><button className="primary-button" type="button" onClick={confirmImport} disabled={!connection || importPreview.added + importPreview.updated === 0}><Upload size={16} />{!connection ? 'Connect GitHub first' : importPreview.added + importPreview.updated === 0 ? 'Already up to date' : `Import ${importPreview.added + importPreview.updated} change${importPreview.added + importPreview.updated === 1 ? '' : 's'}`}</button><button className="text-button" type="button" onClick={() => { setImportBundle(null); setImportFileName('') }}>Cancel</button></div>
+            </div>
+          )}
         </div>
       </section>
 

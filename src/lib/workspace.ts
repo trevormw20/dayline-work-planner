@@ -89,6 +89,7 @@ export function makeTask(
     tags: partial.tags || [],
     tip: partial.tip || defaultTip(title, kind),
     ...(partial.dailyKey ? { dailyKey: partial.dailyKey } : {}),
+    ...(partial.importMeta ? { importMeta: partial.importMeta } : {}),
   }
 }
 
