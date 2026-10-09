@@ -1,0 +1,17 @@
+{
+  "format": "dayline-project-task",
+  "version": 1,
+  "submissionId": "2026-10-09-modifications",
+  "projectId": "count-on-chaos",
+  "projectName": "Count on Chaos",
+  "submittedAt": "2026-10-09T09:00:00-06:00",
+  "title": "October 9 modifications and playtest",
+  "notes": "Example only: replace these steps with verified work from the project chat.",
+  "priority": "medium",
+  "subtasks": [
+    { "id": "fix-restart", "title": "Fix the restart issue", "notes": "Include the actual reproduction steps." },
+    { "id": "add-feature", "title": "Add the requested feature", "notes": "Describe the feature and its acceptance criteria." },
+    { "id": "verify-feature", "title": "Double-check the feature works", "notes": "Run the relevant tests and record the result." },
+    { "id": "playtest-feedback", "title": "Playtest and give feedback", "notes": "Record what worked, what was confusing, and any remaining issues." }
+  ]
+}

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitHubConnection, WorkspaceData } from '../types'
 import { demoWorkspace } from '../data/seed'
-import { GitHubError, readGitHubWorkspace, saveWithConflictResolution, writeGitHubWorkspace } from '../lib/github'
-import { emptyWorkspace, ensureDailyTask, generateReports, wakeSnoozedTasks } from '../lib/workspace'
+import { GitHubError, readGitHubWorkspace, readProjectInbox, saveWithConflictResolution, writeGitHubWorkspace } from '../lib/github'
+import { emptyWorkspace, ensureDailyTask, generateReports, mergeWorkspaces, wakeSnoozedTasks } from '../lib/workspace'
 
 const CONFIG_KEY = 'dayline.github.config'
 const TOKEN_KEY = 'dayline.github.token'
@@ -32,12 +32,14 @@ export function useWorkspace() {
   const [connection, setConnection] = useState<GitHubConnection | null>(() => readStoredConnection())
   const [syncState, setSyncState] = useState<SyncState>(() => (readStoredConnection() ? 'connecting' : 'demo'))
   const [syncMessage, setSyncMessage] = useState('Try everything safely — demo changes are not saved')
+  const [inboxIssues, setInboxIssues] = useState<string[]>([])
   const shaRef = useRef<string | undefined>(undefined)
   const saveTimer = useRef<number | undefined>(undefined)
   const connectionRef = useRef<GitHubConnection | null>(connection)
   const dataRef = useRef(data)
   const loadingRef = useRef(false)
   const dirtyRef = useRef(false)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     connectionRef.current = connection
@@ -50,6 +52,7 @@ export function useWorkspace() {
   const saveNow = useCallback(async (nextData?: WorkspaceData) => {
     const activeConnection = connectionRef.current
     if (!activeConnection) return
+    if (savingRef.current) return
     const payload = nextData || dataRef.current
     if (!navigator.onLine) {
       setSyncState('offline')
@@ -57,17 +60,27 @@ export function useWorkspace() {
       return
     }
     setSyncState('saving')
+    savingRef.current = true
     setSyncMessage('Saving to GitHub…')
     try {
       const result = await saveWithConflictResolution(activeConnection, payload, shaRef.current)
+      if (connectionRef.current !== activeConnection) return
       shaRef.current = result.sha
-      if (result.merged) setData(result.data)
+      const changedDuringSave = dataRef.current !== payload
+      if (result.merged || changedDuringSave) {
+        const next = changedDuringSave ? mergeWorkspaces(dataRef.current, result.data) : result.data
+        dataRef.current = next
+        setData(next)
+      }
       setSyncState('saved')
       setSyncMessage(result.merged ? 'Merged changes from another device' : 'Saved to GitHub')
-      dirtyRef.current = false
+      dirtyRef.current = changedDuringSave
+      if (changedDuringSave) saveTimer.current = window.setTimeout(() => void saveNow(), 700)
     } catch (error) {
       setSyncState('error')
       setSyncMessage(error instanceof Error ? error.message : 'Could not save to GitHub')
+    } finally {
+      savingRef.current = false
     }
   }, [])
 
@@ -109,6 +122,13 @@ export function useWorkspace() {
         remote = prepare(emptyWorkspace())
         sha = await writeGitHubWorkspace(nextConnection, remote)
       }
+      const inbox = await readProjectInbox(nextConnection, remote)
+      setInboxIssues(inbox.issues)
+      if (inbox.data !== remote) {
+        const saved = await saveWithConflictResolution(nextConnection, inbox.data, sha)
+        remote = saved.data
+        sha = saved.sha
+      }
       const config: StoredConfig = {
         owner: nextConnection.owner,
         repo: nextConnection.repo,
@@ -146,6 +166,7 @@ export function useWorkspace() {
     connectionRef.current = null
     dirtyRef.current = false
     setConnection(null)
+    setInboxIssues([])
     setData(demoWorkspace())
     setSyncState('demo')
     setSyncMessage('Demo mode · changes are not saved')
@@ -153,22 +174,30 @@ export function useWorkspace() {
 
   const refresh = useCallback(async (notify = false) => {
     const activeConnection = connectionRef.current
-    if (!activeConnection || loadingRef.current || !navigator.onLine || dirtyRef.current) return
+    if (!activeConnection || loadingRef.current || !navigator.onLine) return
+    if (dirtyRef.current) { await saveNow(); return }
     loadingRef.current = true
     try {
       const result = await readGitHubWorkspace(activeConnection)
-      const next = prepare(result.data)
+      const inbox = await readProjectInbox(activeConnection, result.data)
+      if (dirtyRef.current || connectionRef.current !== activeConnection) return
+      setInboxIssues(inbox.issues)
+      const next = prepare(inbox.data)
       const previousIds = new Set(dataRef.current.tasks.map((task) => task.id))
-      const newTasks = next.tasks.filter((task) => !previousIds.has(task.id) && task.source === 'gmail')
+      const newTasks = next.tasks.filter((task) => !previousIds.has(task.id) && (task.source === 'gmail' || task.projectSubmission))
       shaRef.current = result.sha
       dataRef.current = next
       setData(next)
       setSyncState('saved')
       setSyncMessage('Up to date with GitHub')
-      if (notify && newTasks.length && Notification.permission === 'granted' && navigator.serviceWorker.controller) {
+      if (inbox.data !== result.data) {
+        dirtyRef.current = true
+        await saveNow(next)
+      }
+      if (notify && newTasks.length && typeof Notification !== 'undefined' && Notification.permission === 'granted' && navigator.serviceWorker?.controller) {
         navigator.serviceWorker.controller.postMessage({
           type: 'DAYLINE_NOTIFY',
-          title: `${newTasks.length} new task${newTasks.length === 1 ? '' : 's'} from Gmail`,
+          title: `${newTasks.length} new task${newTasks.length === 1 ? '' : 's'} in Dayline`,
           body: newTasks[0].title,
           tag: `gmail-${newTasks[0].id}`,
         })
@@ -179,7 +208,7 @@ export function useWorkspace() {
     } finally {
       loadingRef.current = false
     }
-  }, [])
+  }, [saveNow])
 
   useEffect(() => {
     if (connection) void refresh()
@@ -204,6 +233,7 @@ export function useWorkspace() {
     saveNow,
     syncState,
     syncMessage,
+    inboxIssues,
     isDemo: !connection,
   }
 }

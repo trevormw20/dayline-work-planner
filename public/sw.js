@@ -1,4 +1,4 @@
-const CACHE = 'dayline-shell-v2'
+const CACHE = 'dayline-shell-v3'
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg']
 
 self.addEventListener('install', (event) => {

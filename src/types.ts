@@ -33,6 +33,21 @@ export interface Task {
   tip: string
   dailyKey?: string
   importMeta?: TaskImportMeta
+  projectSubmission?: {
+    submissionId: string
+    projectId: string
+    projectName: string
+    submittedAt: string
+  }
+  subtasks?: Subtask[]
+}
+
+export interface Subtask {
+  id: string
+  title: string
+  notes: string
+  completedAt: string | null
+  updatedAt: string
 }
 
 export interface ImportedTaskSnapshot {
@@ -93,6 +108,7 @@ export interface WorkspaceData {
     lastSyncAt: string | null
     processedMessageIds: string[]
   }
+  taskInbox?: Record<string, { sha: string; submissionId: string; importedAt: string }>
 }
 
 export interface GitHubConnection {
@@ -104,5 +120,5 @@ export interface GitHubConnection {
   rememberToken: boolean
 }
 
-export type ViewId = 'today' | 'inbox' | 'schedule' | 'reports' | 'settings'
+export type ViewId = 'today' | 'inbox' | 'schedule' | 'projects' | 'reports' | 'settings'
 export type WorkplaceFilter = 'all' | WorkplaceId

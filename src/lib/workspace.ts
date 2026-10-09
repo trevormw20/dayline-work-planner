@@ -90,6 +90,8 @@ export function makeTask(
     tip: partial.tip || defaultTip(title, kind),
     ...(partial.dailyKey ? { dailyKey: partial.dailyKey } : {}),
     ...(partial.importMeta ? { importMeta: partial.importMeta } : {}),
+    ...(partial.projectSubmission ? { projectSubmission: partial.projectSubmission } : {}),
+    ...(partial.subtasks ? { subtasks: partial.subtasks } : {}),
   }
 }
 
@@ -134,6 +136,15 @@ export function completeTask(data: WorkspaceData, taskId: string, completed: boo
     status: completed ? 'done' : 'open',
     completedAt: completed ? now : null,
   })
+}
+
+export function completeSubtask(data: WorkspaceData, taskId: string, subtaskId: string, completed: boolean): WorkspaceData {
+  const task = data.tasks.find((entry) => entry.id === taskId)
+  if (!task?.subtasks?.some((step) => step.id === subtaskId)) return data
+  const now = new Date().toISOString()
+  const subtasks = task.subtasks.map((step) => step.id === subtaskId ? { ...step, completedAt: completed ? now : null, updatedAt: now } : step)
+  const done = subtasks.every((step) => Boolean(step.completedAt))
+  return updateTask(data, taskId, { subtasks, status: done ? 'done' : 'open', completedAt: done ? now : null })
 }
 
 export function snoozeTask(data: WorkspaceData, taskId: string, until: Date): WorkspaceData {
@@ -209,7 +220,20 @@ export function mergeWorkspaces(local: WorkspaceData, remote: WorkspaceData): Wo
   const tasks = new Map<string, Task>()
   for (const task of [...remote.tasks, ...local.tasks]) {
     const existing = tasks.get(task.id)
-    if (!existing || new Date(task.updatedAt) > new Date(existing.updatedAt)) tasks.set(task.id, task)
+    if (!existing) tasks.set(task.id, task)
+    else {
+      const latest = new Date(task.updatedAt) > new Date(existing.updatedAt) ? task : existing
+      if (task.projectSubmission || existing.projectSubmission) {
+        const steps = new Map((existing.subtasks ?? []).map((step) => [step.id, step]))
+        for (const step of task.subtasks ?? []) {
+          const old = steps.get(step.id)
+          if (!old || step.updatedAt > old.updatedAt) steps.set(step.id, step)
+        }
+        const subtasks = [...steps.values()]
+        const allDone = subtasks.length > 0 && subtasks.every((step) => step.completedAt)
+        tasks.set(task.id, { ...latest, subtasks, ...(allDone ? { status: 'done', completedAt: subtasks.map((step) => step.completedAt!).sort().at(-1)! } : latest.status === 'done' ? { status: 'open', completedAt: null } : {}) })
+      } else tasks.set(task.id, latest)
+    }
   }
   const reports = new Map([...remote.reports, ...local.reports].map((report) => [report.id, report]))
   const briefs = new Map([...remote.briefs, ...local.briefs].map((brief) => [brief.date, brief]))
@@ -219,6 +243,7 @@ export function mergeWorkspaces(local: WorkspaceData, remote: WorkspaceData): Wo
     reports: [...reports.values()],
     briefs: [...briefs.values()],
     workplaces: local.workplaces.length ? local.workplaces : remote.workplaces,
+    taskInbox: { ...remote.taskInbox, ...local.taskInbox },
     gmail: {
       lastSyncAt:
         local.gmail.lastSyncAt && (!remote.gmail.lastSyncAt || local.gmail.lastSyncAt > remote.gmail.lastSyncAt)

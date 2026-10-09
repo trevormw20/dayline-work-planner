@@ -140,6 +140,7 @@ function mergeWorkspace(remote, local) {
     tasks: [...tasks.values()],
     briefs: [...new Map([...remote.briefs, ...local.briefs].map((brief) => [brief.date, brief])).values()],
     reports: [...new Map([...remote.reports, ...local.reports].map((report) => [report.id, report])).values()],
+    taskInbox: { ...remote.taskInbox, ...local.taskInbox },
     gmail: {
       lastSyncAt: [remote.gmail.lastSyncAt, local.gmail.lastSyncAt].filter(Boolean).sort().at(-1) || null,
       processedMessageIds: [...new Set([...remote.gmail.processedMessageIds, ...local.gmail.processedMessageIds])].slice(-1000),

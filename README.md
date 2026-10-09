@@ -179,6 +179,8 @@ Until then:
 
 ## Project map
 
+Project chats can also submit one parent task with checklist steps using the automatic private GitHub inbox. See [PROJECT_TASK_INBOX.md](PROJECT_TASK_INBOX.md) for the format, submission helper, and copy/paste instructions. This inbox is read when Dayline opens and during sync; it requires no OpenAI calls.
+
 ```text
 src/                         React application
   hooks/useWorkspace.ts      GitHub sync and device polling

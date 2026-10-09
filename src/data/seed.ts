@@ -91,7 +91,18 @@ export function demoWorkspace(now = new Date()): WorkspaceData {
 
   return {
     ...base,
-    tasks: [...tasks, doneOne, doneTwo],
+    tasks: [...tasks, doneOne, doneTwo, makeTask('Sample modifications and playtest', {
+      id: 'demo_project_chaos', workplace: 'soleivar', kind: 'task', startPriority: 'medium',
+      scheduledFor: null, dueAt: null, source: 'import', sourceId: 'demo-project-chaos',
+      notes: 'Demo only: a project chat sends one summary with separate checklist steps.',
+      projectSubmission: { submissionId: 'demo-modifications', projectId: 'count-on-chaos', projectName: 'Count on Chaos', submittedAt: now.toISOString() },
+      subtasks: [
+        { id: 'demo-fix', title: 'Fix the reported restart issue', notes: 'Use the reproduction steps supplied by the project chat.', completedAt: null, updatedAt: now.toISOString() },
+        { id: 'demo-add', title: 'Add the requested feature', notes: '', completedAt: null, updatedAt: now.toISOString() },
+        { id: 'demo-verify', title: 'Double-check the update works', notes: '', completedAt: null, updatedAt: now.toISOString() },
+        { id: 'demo-playtest', title: 'Playtest and record feedback', notes: '', completedAt: null, updatedAt: now.toISOString() },
+      ],
+    })],
     briefs: [
       {
         date: toDateKey(now),

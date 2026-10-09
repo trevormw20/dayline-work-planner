@@ -42,6 +42,7 @@ import {
   activeTasks,
   buildCurrentBrief,
   completeTask,
+  completeSubtask,
   makeTask,
   snoozeTask,
   updateTask,
@@ -81,6 +82,7 @@ const NAV_ITEMS: Array<{ id: ViewId; label: string; icon: typeof ListTodo }> = [
   { id: 'today', label: 'Today', icon: ListTodo },
   { id: 'inbox', label: 'Inbox', icon: Inbox },
   { id: 'schedule', label: 'Schedule', icon: CalendarDays },
+  { id: 'projects', label: 'Projects', icon: ListTodo },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -132,12 +134,17 @@ function App() {
       tasks: workspace.data.tasks.filter(
         (task) =>
           (workplaceFilter === 'all' || task.workplace === workplaceFilter) &&
-          (!query || `${task.title} ${task.notes} ${task.tags.join(' ')}`.toLowerCase().includes(query)),
+          (!query || `${task.title} ${task.notes} ${task.tags.join(' ')} ${(task.subtasks ?? []).map((step) => `${step.title} ${step.notes}`).join(' ')}`.toLowerCase().includes(query)),
       ),
     }
   }, [workspace.data, workplaceFilter, search])
 
   const onComplete = (task: Task, completed: boolean) => {
+    if (completed && task.subtasks?.some((step) => !step.completedAt)) {
+      setView('projects')
+      setToast('Check off the project’s remaining steps to finish it')
+      return
+    }
     workspace.mutate((data) => completeTask(data, task.id, completed))
     setToast(completed ? 'Nice work — added to this week’s report' : 'Task moved back to your plan')
   }
@@ -212,6 +219,11 @@ function App() {
             />
           )}
           {view === 'reports' && <ReportsView data={visibleData} />}
+          {view === 'projects' && <ProjectsView data={visibleData} issues={workspace.inboxIssues} onEdit={setEditingTask} onRefresh={() => void workspace.refresh()} onStep={(taskId, stepId, checked) => {
+            const task = workspace.data.tasks.find((entry) => entry.id === taskId)
+            workspace.mutate((data) => completeSubtask(data, taskId, stepId, checked))
+            if (checked && task?.subtasks?.every((step) => step.id === stepId || step.completedAt)) setToast('Project completed — added to this week’s report')
+          }} />}
           {view === 'settings' && (
             <SettingsView
               data={workspace.data}
@@ -249,6 +261,7 @@ function App() {
         <TaskEditor
           task={workspace.data.tasks.find((task) => task.id === editingTask.id) || editingTask}
           onClose={() => setEditingTask(null)}
+          onShowProject={() => { setEditingTask(null); setView('projects') }}
           onSave={(taskId, updates) => {
             workspace.mutate((data) => updateTask(data, taskId, updates))
             setEditingTask(null)
@@ -564,12 +577,41 @@ function TaskRow({
           <span className={`workspace-dot ${task.workplace}`} />
           <span>{task.workplace === 'hidermatology' ? 'Hidermatology' : 'Soleivar'}</span>
           {date && <><span className="meta-divider" /><Clock3 size={13} /><span>{formatRelativeDay(date)}</span></>}
+          {task.projectSubmission && <><span className="meta-divider" /><span>{task.projectSubmission.projectName} · {task.subtasks?.filter((step) => step.completedAt).length ?? 0}/{task.subtasks?.length ?? 0} steps</span></>}
         </span>
       </button>
       {!compact && <span className={`aging-reason ${effective.overdueDays ? 'overdue' : ''}`}>{effective.reason}</span>}
       <button className="task-action" onClick={() => onSnooze(task)} title="Snooze until tomorrow" aria-label="Snooze until tomorrow"><TimerReset size={17} /></button>
     </article>
   )
+}
+
+function ProjectsView({ data, issues, onEdit, onRefresh, onStep }: {
+  data: WorkspaceData; issues: string[]; onEdit: (task: Task) => void; onRefresh: () => void
+  onStep: (taskId: string, stepId: string, checked: boolean) => void
+}) {
+  const [showDone, setShowDone] = useState(false)
+  const projects = data.tasks.filter((task) => task.projectSubmission && (showDone || task.status !== 'done')).sort(sortTasks)
+  const groups = [...new Set(projects.map((task) => task.projectSubmission!.projectId))]
+  return <div className="page projects-page">
+    <section className="page-heading"><div><span className="eyebrow">From your project chats</span><h1>Projects</h1><p>One submission, one task. Work through its steps here.</p></div><button className="secondary-button" onClick={onRefresh}><RefreshCw size={16} />Check for new work</button></section>
+    <div className="project-toolbar"><label><input type="checkbox" checked={showDone} onChange={(event) => setShowDone(event.target.checked)} /> Show completed submissions</label><span>Checked on launch and every minute while open</span></div>
+    {issues.length > 0 && <div className="form-error" role="alert"><strong>Some files need attention</strong>{issues.map((issue) => <p key={issue}>{issue}</p>)}</div>}
+    {!projects.length && <div className="empty-row"><Inbox size={24} /><span>{data.tasks.some((task) => task.projectSubmission) ? 'No open project submissions. Turn on Show completed submissions to review finished work.' : 'No project submissions yet. Ask a project chat to submit a Dayline project task. Instructions are in Settings.'}</span></div>}
+    {groups.map((projectId) => <section className="project-group" key={projectId}><h2>{projects.find((task) => task.projectSubmission!.projectId === projectId)!.projectSubmission!.projectName}</h2>
+      {projects.filter((task) => task.projectSubmission!.projectId === projectId).map((task) => {
+        const steps = task.subtasks ?? []
+        const done = steps.filter((step) => step.completedAt).length
+        const priority = getEffectivePriority(task).priority
+        return <article className={`project-card ${task.status === 'done' ? 'is-done' : ''}`} key={task.id}>
+          <div className="project-card-head"><div><span className="eyebrow">Submitted {formatShortDate(task.projectSubmission!.submittedAt)}</span><h3>{task.title}</h3></div><button className="text-button" onClick={() => onEdit(task)}>Details</button></div>
+          <div className="project-progress"><span className={`priority-badge ${priority}`}>{priorityLabel(priority)}</span><span>{done}/{steps.length} steps done{task.status === 'done' ? ' · Complete' : task.status === 'snoozed' ? ' · Snoozed' : ''}</span><progress value={done} max={steps.length} aria-label={`${task.title} progress`} /></div>
+          {task.notes && <p className="project-notes">{task.notes}</p>}
+          <div className="project-checklist">{steps.map((step) => <label key={step.id} className={step.completedAt ? 'checked' : ''}><input type="checkbox" checked={Boolean(step.completedAt)} onChange={(event) => onStep(task.id, step.id, event.target.checked)} /><span><strong>{step.title}</strong>{step.notes && <small>{step.notes}</small>}</span></label>)}</div>
+        </article>
+      })}
+    </section>)}
+  </div>
 }
 
 function InboxView({
@@ -896,8 +938,13 @@ function SettingsView({
       </section>
 
       <section className="settings-section">
-        <div className="settings-copy"><span className="settings-icon notify"><BellRing size={21} /></span><div><h2>New-task alerts</h2><p>While Dayline is open, it checks GitHub every minute and can alert you when Gmail creates a new task.</p></div></div>
+        <div className="settings-copy"><span className="settings-icon notify"><BellRing size={21} /></span><div><h2>New-task alerts</h2><p>While Dayline is open, it checks GitHub every minute and can alert you when Gmail or a project submission creates a task.</p></div></div>
         <div className="settings-panel compact-panel"><div><strong>Browser notifications</strong><p>{notificationState === 'granted' ? 'Allowed on this device.' : notificationState === 'denied' ? 'Blocked in browser settings.' : 'Not enabled yet.'}</p></div><button className="secondary-button" onClick={() => void requestNotifications()} disabled={notificationState === 'granted' || notificationState === 'denied'}><Bell size={16} /> {notificationState === 'granted' ? 'Enabled' : 'Enable alerts'}</button></div>
+      </section>
+
+      <section className="settings-section">
+        <div className="settings-copy"><span className="settings-icon import"><ListTodo size={21} /></span><div><h2>Project submissions</h2><p>Other chats can leave individual task files. Each file becomes one parent task with a separate checklist in Projects.</p></div></div>
+        <div className="settings-panel project-instructions"><strong>Ask your project chat:</strong><p>“Create a dayline-project-task JSON file from this project’s verified remaining work, with one dated summary task and stable subtask IDs. Use Dayline’s PROJECT_TASK_INBOX.md instructions and submit it with the helper.”</p><p>Files go in <code>task-inbox/</code> in your private data repository. Dayline checks on launch, every minute while open, and when you press Sync. A file saved only on your computer must be submitted before your phone can see it.</p><p>Re-reading a file preserves checked steps. New submission IDs create new parent tasks; reused IDs add new steps to the existing task.</p><a className="secondary-button inline" href="https://github.com/trevormw20/dayline-work-planner/blob/main/PROJECT_TASK_INBOX.md" target="_blank" rel="noreferrer"><ExternalLink size={15} /> Instructions for project chats</a></div>
       </section>
 
       <section className="settings-section">
@@ -949,11 +996,13 @@ function TaskEditor({
   onClose,
   onSave,
   onArchive,
+  onShowProject,
 }: {
   task: Task
   onClose: () => void
   onSave: (id: string, updates: Partial<Task>) => void
   onArchive: (id: string) => void
+  onShowProject: () => void
 }) {
   const [draft, setDraft] = useState(task)
   const effective = getEffectivePriority(task)
@@ -961,7 +1010,8 @@ function TaskEditor({
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    onSave(task.id, draft)
+    const { subtasks: _subtasks, status: _status, completedAt: _completedAt, ...editable } = draft
+    onSave(task.id, editable)
   }
 
   return (
@@ -980,6 +1030,7 @@ function TaskEditor({
           </div>
 
           <Field label="Notes"><textarea className="notes-area" value={draft.notes} onChange={(event) => set('notes', event.target.value)} placeholder="Context, links, or the result you need…" /></Field>
+          {task.projectSubmission && <div className="project-editor-link"><strong>{task.subtasks?.filter((step) => step.completedAt).length ?? 0}/{task.subtasks?.length ?? 0} project steps complete</strong><button type="button" className="secondary-button" onClick={onShowProject}>Open project checklist</button></div>}
 
           <div className="kind-toggle"><button type="button" className={draft.kind === 'task' ? 'active' : ''} onClick={() => { set('kind', 'task'); set('followUp', null) }}><ListTodo size={16} /> Standard task</button><button type="button" className={draft.kind === 'follow_up' ? 'active' : ''} onClick={() => { set('kind', 'follow_up'); set('followUp', draft.followUp || { contact: '', channel: 'call', nextDate: draft.scheduledFor, outcome: '' }) }}><AlarmClock size={16} /> Follow-up</button></div>
 
@@ -996,7 +1047,7 @@ function TaskEditor({
           )}
 
           <div className="tip-card"><Lightbulb size={18} /><div><strong>Fastest next step</strong><textarea value={draft.tip} onChange={(event) => set('tip', event.target.value)} /></div></div>
-          <div className="drawer-actions"><button type="button" className="archive-button" onClick={() => onArchive(task.id)}><Archive size={16} /> Archive</button><span /><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">Save changes</button></div>
+          <div className="drawer-actions"><button type="button" className="archive-button" disabled={task.subtasks?.some((step) => !step.completedAt)} onClick={() => onArchive(task.id)}><Archive size={16} /> Archive</button><span /><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit">Save changes</button></div>
         </form>
       </aside>
     </div>

@@ -1,5 +1,6 @@
 import type { GitHubConnection, WorkspaceData } from '../types'
 import { mergeWorkspaces, normalizeWorkspace } from './workspace'
+import { mergeProjectSubmission, parseProjectSubmission } from './projectInbox'
 
 const API_VERSION = '2026-03-10'
 
@@ -85,6 +86,36 @@ export async function readGitHubWorkspace(
   } catch {
     throw new GitHubError('The workspace file exists, but it is not valid Dayline JSON.', 422)
   }
+}
+
+export async function readProjectInbox(connection: GitHubConnection, data: WorkspaceData): Promise<{ data: WorkspaceData; issues: string[] }> {
+  const folderConnection = { ...connection, path: 'task-inbox' }
+  const url = new URL(endpoint(folderConnection))
+  url.searchParams.set('ref', connection.branch)
+  const response = await fetch(url, { headers: headers(connection.token), cache: 'no-store' })
+  if (response.status === 404) return { data, issues: [] }
+  if (!response.ok) return { data, issues: [(await parseError(response)).message] }
+  const files: Array<{ type: string; name: string; path: string; sha: string; size: number }> = await response.json()
+  if (!Array.isArray(files)) return { data, issues: ['task-inbox must be a folder.'] }
+  let next = data
+  const issues: string[] = []
+  for (const file of files.filter((entry) => entry.type === 'file' && entry.name.endsWith('.json'))) {
+    if (next.taskInbox?.[file.path]?.sha === file.sha) continue
+    try {
+      if (file.size > 256_000) throw new Error('Maximum submission size is 256 KB.')
+      const fileUrl = new URL(endpoint({ ...connection, path: file.path }))
+      fileUrl.searchParams.set('ref', connection.branch)
+      const result = await fetch(fileUrl, { headers: headers(connection.token), cache: 'no-store' })
+      if (!result.ok) throw await parseError(result)
+      const body: GitHubFileResponse = await result.json()
+      if (body.encoding !== 'base64') throw new Error('Unsupported file encoding.')
+      const submission = parseProjectSubmission(JSON.parse(decodeBase64(body.content)))
+      next = mergeProjectSubmission(next, submission, file.path, body.sha)
+    } catch (error) {
+      issues.push(`${file.name}: ${error instanceof Error ? error.message : 'Could not import.'}`)
+    }
+  }
+  return { data: next, issues }
 }
 
 export async function writeGitHubWorkspace(
